@@ -45,7 +45,7 @@ class Server(AsyncServer):
             if len(self.buffer) >= int(self.buffer_ratio * self.num_clients):
                 new_models = []
                 for bi in self.buffer:
-                    update_i, tau_i, grad_i = bi
+                    update_i, tau_i, grad_i, c_i = bi
                     lmbd_i = self.lmbd*math.exp(-(self.current_round-tau_i))
                     if tau_i<self.current_round:
                         grad_i = np.expand_dims(grad_i, -1)
