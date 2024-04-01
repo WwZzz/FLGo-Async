@@ -19,8 +19,9 @@ class Server(AsyncServer):
     def iterate(self):
         # Scheduler periodically triggers the idle clients to locally train the model
         self.selected_clients = self.sample() if (self.gv.clock.current_time % self.period) == 0 or self.gv.clock.current_time == 1 else []
-        if len(self.selected_clients) > 0:
-            self.gv.logger.info('Select clients {} at time {}'.format(self.selected_clients, self.gv.clock.current_time))
+        # filter clients who have already uploaded their latest updates relative to the current model
+        self.selected_clients = [cid for cid in self.selected_clients if cid not in [bi[2] for bi in self.buffer if bi[1]==self.current_round]]
+        if len(self.selected_clients) > 0: self.gv.logger.info('Select clients {} at time {}'.format(self.selected_clients, self.gv.clock.current_time))
         res = self.communicate(self.selected_clients, asynchronous=True)
         received_updates = res['update']
         received_client_taus = res['round']
@@ -28,8 +29,8 @@ class Server(AsyncServer):
         # if reveive client update
         if len(received_updates) > 0:
             self.gv.logger.info('Receive new models from clients {} at time {}'.format(received_client_ids, self.gv.clock.current_time))
-            for cdelta, ctau in zip(received_updates, received_client_taus):
-                self.buffer.append((cdelta, ctau))
+            for cdelta, ctau, cid in zip(received_updates, received_client_taus, received_client_ids):
+                self.buffer.append((cdelta, ctau, cid))
             if len(self.buffer)>=int(self.buffer_ratio*self.num_clients):
                 # aggregate and clear updates in buffer
                 taus_bf = [b[1] for b in self.buffer]

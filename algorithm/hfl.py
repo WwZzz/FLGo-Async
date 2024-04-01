@@ -1,17 +1,24 @@
 """This is a non-official implementation of 'Stragglers Are Not Disaster: A Hybrid Federated Learning Algorithm with Delayed Gradients' (http://arxiv.org/abs/2102.06329). """
 from collections import OrderedDict
 
+import numpy as np
 import torch
 from flgo.algorithm.fedasync import Server as AsyncServer
 from flgo.algorithm.fedbase import BasicClient
+import math
 import flgo.utils.fmodule as fmodule
 import copy
 
 class Server(AsyncServer):
     def initialize(self):
-        self.init_algo_para({'buffer_ratio': 0.2, 'eta': 1.0, 'period': 1,})
+        self.init_algo_para(
+            {'lmbd': 0.5, 'buffer_ratio': 0.2,'period': 1})
         self.tolerance_for_latency = 1000
+        self.model_history = []
         self.buffer = []
+
+    def model2numpy(self, model):
+        return torch.cat([p.reshape(-1) for p in model.parameters()], dim=0).detach().cpu().numpy()
 
     def pack(self, client_id, mtype=0, *args, **kwargs):
         return {
@@ -20,27 +27,34 @@ class Server(AsyncServer):
         }
 
     def iterate(self):
-        # Scheduler periodically triggers the idle clients to locally train the model
+        # record the global model of each round
+        if len(self.model_history)<self.current_round: self.model_history.append(self.model2numpy(self.model))
         self.selected_clients = self.sample() if (self.gv.clock.current_time % self.period) == 0 or self.gv.clock.current_time == 1 else []
-        if len(self.selected_clients) > 0:
-            self.gv.logger.info('Select clients {} at time {}'.format(self.selected_clients, self.gv.clock.current_time))
+        self.selected_clients = [cid for cid in self.selected_clients if cid not in [bi[-1] for bi in self.buffer if bi[1]==self.current_round]]
+        if len(self.selected_clients) > 0: self.gv.logger.info('Select clients {} at time {}'.format(self.selected_clients, self.gv.clock.current_time))
+        # Check the currently received models
         res = self.communicate(self.selected_clients, asynchronous=True)
-        received_updates = res['update']
-        received_client_taus = res['round']
-        received_client_grads = res['grad']
+        received_client_taus= res['round']
         received_client_ids = res['__cid']
-        # if reveive client update
+        received_updates = res['update']
+        received_client_grads = res['grad']
         if len(received_updates) > 0:
             self.gv.logger.info('Receive new models from clients {} at time {}'.format(received_client_ids, self.gv.clock.current_time))
-            for cdelta, ctau in zip(received_updates, received_client_taus):
-                self.buffer.append((cdelta, ctau))
-            if len(self.buffer)>=int(self.buffer_ratio*self.num_clients):
-                # aggregate and clear updates in buffer
-                taus_bf = [b[1] for b in self.buffer]
-                updates_bf = [b[0] for b in self.buffer]
-                weights_bf = [(1+self.current_round-ctau)**(-0.5) for ctau in taus_bf]
-                model_delta = fmodule._model_average(updates_bf, weights_bf)/len(self.buffer)
-                self.model = self.model + self.eta * model_delta
+            for cdelta, ctau, cgrad, cid in zip(received_updates, received_client_taus, received_client_grads, received_client_ids):
+                self.buffer.append((cdelta, ctau, cgrad, cid))
+            if len(self.buffer) >= int(self.buffer_ratio * self.num_clients):
+                new_models = []
+                for bi in self.buffer:
+                    update_i, tau_i, grad_i = bi
+                    lmbd_i = self.lmbd*math.exp(-(self.current_round-tau_i))
+                    if tau_i<self.current_round:
+                        grad_i = np.expand_dims(grad_i, -1)
+                        Ri_mul_delta = grad_i@(grad_i.T@(self.model_history[self.current_round-1] - self.model_history[tau_i-1]))
+                        fixed_part = torch.from_numpy((Ri_mul_delta)).float()*self.learning_rate
+                        update_i = update_i + fmodule._model_from_tensor(fixed_part, update_i.__class__).to(update_i.get_device())
+                    model_i = (1-lmbd_i)*self.model + lmbd_i*(self.model - update_i)
+                    new_models.append(model_i)
+                self.model = self.aggregate(new_models)
                 # clear buffer
                 self.buffer = []
                 return True
@@ -53,6 +67,7 @@ class Client(BasicClient):
         return model, round
 
     def pack(self, model, round, grad):
+        grad = torch.cat([g.reshape(-1) for g in grad.values()], dim=0).cpu().numpy()
         return {'update':model, 'round':round, 'grad':grad}
 
     def reply(self, svr_pkg):
@@ -62,12 +77,12 @@ class Client(BasicClient):
         global_model.to(self.device)
         for batch_id, batch_data in enumerate(dataloader):
             batch_data = self.calculator.to_device(batch_data)
-            loss = self.calculator.compute_loss(global_model, batch_data)['loss']*len(batch_id)
+            loss = self.calculator.compute_loss(global_model, batch_data)['loss']*len(batch_data[0])
             loss.backward()
         grad = OrderedDict()
         with torch.no_grad():
-            for n,p in global_model.parameters():
+            for n,p in global_model.named_parameters():
                 grad[n] = p.grad/len(self.train_data)
         self.train(model)
-        cpkg = self.pack(model-global_model, round, grad)
+        cpkg = self.pack(global_model-model, round, grad)
         return cpkg

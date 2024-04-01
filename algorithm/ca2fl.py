@@ -24,6 +24,8 @@ class Server(AsyncServer):
         self.selected_clients = self.sample() if (self.gv.clock.current_time % self.period) == 0 or self.gv.clock.current_time == 1 else []
         if len(self.selected_clients) > 0:
             self.gv.logger.info('Select clients {} at time {}'.format(self.selected_clients, self.gv.clock.current_time))
+        # filter clients who have already uploaded their latest updates relative to the current model
+        self.selected_clients = [cid for cid in self.selected_clients if cid not in [bi[-1] for bi in self.buffer if bi[0]==self.current_round]]
         res = self.communicate(self.selected_clients, asynchronous=True)
         received_updates = res['update']
         received_client_taus = res['round']
@@ -35,6 +37,7 @@ class Server(AsyncServer):
                 self.m += 1
                 self.delta += (cdelta - (self.hs[cid].to(self.device) if self.hs[cid]!=0 else self.hs[cid]))
                 self.hs[cid] = cdelta.to('cpu')
+                self.buffer.append((ctau, cid))
             if self.m>=int(self.buffer_ratio * self.num_clients):
                 # aggregate and clear updates in buffer
                 ht = fmodule._model_average([h for h in self.hs if h!=0]).to(self.device)
@@ -42,6 +45,7 @@ class Server(AsyncServer):
                 self.model = self.model + self.eta * vt
                 self.m = 0
                 self.delta = self.model.zeros_like()
+                self.buffer = []
                 return True
         return False
 
