@@ -1,4 +1,7 @@
 """This is a non-official implementation of 'Stragglers Are Not Disaster: A Hybrid Federated Learning Algorithm with Delayed Gradients' (http://arxiv.org/abs/2102.06329). """
+from collections import OrderedDict
+
+import torch
 from flgo.algorithm.fedasync import Server as AsyncServer
 from flgo.algorithm.fedbase import BasicClient
 import flgo.utils.fmodule as fmodule
@@ -24,6 +27,7 @@ class Server(AsyncServer):
         res = self.communicate(self.selected_clients, asynchronous=True)
         received_updates = res['update']
         received_client_taus = res['round']
+        received_client_grads = res['grad']
         received_client_ids = res['__cid']
         # if reveive client update
         if len(received_updates) > 0:
@@ -48,12 +52,22 @@ class Client(BasicClient):
         model = received_pkg['model']
         return model, round
 
-    def pack(self, model, round):
-        return {'update':model, 'round':round}
+    def pack(self, model, round, grad):
+        return {'update':model, 'round':round, 'grad':grad}
 
     def reply(self, svr_pkg):
         model,round  = self.unpack(svr_pkg)
         global_model = copy.deepcopy(model)
+        dataloader = self.calculator.get_dataloader(self.train_data, self.batch_size)
+        global_model.to(self.device)
+        for batch_id, batch_data in enumerate(dataloader):
+            batch_data = self.calculator.to_device(batch_data)
+            loss = self.calculator.compute_loss(global_model, batch_data)['loss']*len(batch_id)
+            loss.backward()
+        grad = OrderedDict()
+        with torch.no_grad():
+            for n,p in global_model.parameters():
+                grad[n] = p.grad/len(self.train_data)
         self.train(model)
-        cpkg = self.pack(model-global_model, round)
+        cpkg = self.pack(model-global_model, round, grad)
         return cpkg
