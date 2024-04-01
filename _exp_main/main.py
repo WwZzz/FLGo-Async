@@ -12,7 +12,8 @@ args_parser = argparse.ArgumentParser()
 args_parser.add_argument('--method', type=str, default='hfl')
 args_parser.add_argument('--task', type=str, default='CIFAR100_DIR0.3_N20')
 args_parser.add_argument('--simulator', type=str, default='')
-args_parser.add_argument('--max_time', type=str, default=10801000)
+args_parser.add_argument('--max_time', type=int, default=10801000)
+args_parser.add_argument('--gpu', type=int, default=0)
 args = args_parser.parse_args()
 
 task_model = {
@@ -29,13 +30,13 @@ Model = task_model.get(dataset, None)
 if Model is not None:
     def get_model():
         return Model()
-    model = flgo.convert_model(get_model, str(Model.__class__))
+    model = flgo.convert_model(get_model, Model.__name__)
 else:
     model = None
 
 task = f'../task/{args.task}'
 Simulator = None if args.simulator=='' else eval('.'.join(['simulator', args.simulator]))
-runner = flgo.init(task, method, {'gpu':0, 'num_epochs':5, 'learning_rate':0.01, 'sample':'uniform_available', 'proportion':1.0}, model=model, Simulator=Simulator)
+runner = flgo.init(task, method, {'gpu':args.gpu, 'num_epochs':5, 'learning_rate':0.01, 'sample':'uniform_available', 'proportion':1.0}, model=model, Simulator=Simulator)
 
 runner.register_exit_condition(lambda server: server.gv.clock.current_time>args.max_time)
 runner.run()

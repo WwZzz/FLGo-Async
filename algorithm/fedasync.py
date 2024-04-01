@@ -5,7 +5,7 @@ from flgo.algorithm.fedprox import Client
 class Server(BasicServer):
     def initialize(self):
         self.init_algo_para(
-            {'alpha': 0.6, 'mu': 0.005, 'flag': 'constant', 'period': 1, 'hinge_a': 10, 'hinge_b': 6, 'poly_a': 0.5})
+            {'alpha': 0.6, 'mu': 0.005, 'flag': 'poly', 'period': 1, 'hinge_a': 10, 'hinge_b': 6, 'poly_a': 0.5})
         self.tolerance_for_latency = 1000
         self.client_taus = [0 for _ in self.clients]
 
@@ -39,6 +39,6 @@ class Server(BasicServer):
         if self.flag == 'constant':
             return 1
         elif self.flag == 'hinge':
-            return 1 if delta_tau <= self.b else 1.0 / (self.a * (delta_tau - self.b))
+            return 1 if delta_tau <= self.poly_b else 1.0 / (self.poly_a * (delta_tau - self.poly_b))
         elif self.flag == 'poly':
-            return (delta_tau + 1) ** (-self.a)
+            return (delta_tau + 1) ** (-self.hinge_a)
