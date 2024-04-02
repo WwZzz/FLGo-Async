@@ -39,6 +39,6 @@ class Server(BasicServer):
         if self.flag == 'constant':
             return 1
         elif self.flag == 'hinge':
-            return 1 if delta_tau <= self.poly_b else 1.0 / (self.poly_a * (delta_tau - self.poly_b))
+            return 1 if delta_tau <= self.hinge_b else 1.0 / (self.hinge_a * (delta_tau - self.hinge_b))
         elif self.flag == 'poly':
-            return (delta_tau + 1) ** (-self.hinge_a)
+            return (delta_tau + 1) ** (-self.poly_a)
