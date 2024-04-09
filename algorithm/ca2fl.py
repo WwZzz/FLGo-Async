@@ -1,4 +1,5 @@
 """This is a non-official implementation of 'Federated Learning with Buffered Asynchronous Aggregation' (http://arxiv.org/abs/2106.06639). """
+import torch
 from flgo.algorithm.fedasync import Server as AsyncServer
 from flgo.algorithm.fedbase import BasicClient
 import flgo.utils.fmodule as fmodule
@@ -9,7 +10,8 @@ class Server(AsyncServer):
         self.init_algo_para({'buffer_ratio': 0.2, 'eta': 1.0, 'period': 1,})
         self.tolerance_for_latency = 1000
         self.buffer = []
-        self.hs = [0 for _ in self.clients]
+        self.hs = [torch.tensor(0.) for _ in self.clients]
+        self.ht = torch.tensor(0.).to(self.device)
         self.m = 0
         self.delta = self.model.zeros_like()
 
@@ -35,15 +37,15 @@ class Server(AsyncServer):
             self.gv.logger.info('Receive new models from clients {} at time {}'.format(received_client_ids, self.gv.clock.current_time))
             for cdelta, ctau, cid in zip(received_updates, received_client_taus, received_client_ids):
                 self.m += 1
-                self.delta += (cdelta - (self.hs[cid].to(self.device) if self.hs[cid]!=0 else self.hs[cid]))
+                self.delta += (cdelta - self.hs[cid].to(self.device)) if not isinstance(self.hs[cid], torch.Tensor) else cdelta
                 self.hs[cid] = cdelta.to('cpu')
                 self.buffer.append((ctau, cid))
             if self.m>=int(self.buffer_ratio * self.num_clients):
                 # aggregate and clear updates in buffer
-                ht = fmodule._model_average([h for h in self.hs if h!=0]).to(self.device)
-                vt = self.delta + ht
+                vt = self.delta/self.m + self.ht.to(self.device) if not isinstance(self.ht, torch.Tensor) else self.delta/self.m
                 self.model = self.model + self.eta * vt
                 self.m = 0
+                self.ht = fmodule._model_sum([h for h in self.hs if not isinstance(h, torch.Tensor)]).to(self.device)/self.num_clients
                 self.delta = self.model.zeros_like()
                 self.buffer = []
                 return True
