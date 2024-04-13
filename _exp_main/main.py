@@ -37,7 +37,7 @@ else:
 
 task = f'../task/{args.task}'
 Simulator = None if args.simulator=='' else eval('.'.join(['simulator', args.simulator]))
-runner = flgo.init(task, method, {'gpu':args.gpu, 'num_epochs':1, 'learning_rate':0.01, 'sample':'uniform_available', 'proportion':1.0, 'lr_scheduler':0, 'learning_rate_decay':0.998}, model=model, Simulator=Simulator)
+runner = flgo.init(task, method, {'gpu':args.gpu, 'num_epochs':5, 'learning_rate':0.01, 'sample':'uniform_available', 'proportion':0.5, 'lr_scheduler':0, 'learning_rate_decay':0.998}, model=model, Simulator=Simulator)
 
 runner.register_exit_condition(lambda server: server.gv.clock.current_time>args.max_time)
 runner.run()
