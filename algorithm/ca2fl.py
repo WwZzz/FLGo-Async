@@ -1,6 +1,6 @@
 """This is a non-official implementation of 'Tackling the Data Heterogeneity in Asynchronous Federated Learning with Cached Update Calibration' (https://openreview.net/forum?id=4aywmeb97I). """
 import torch
-from flgo.algorithm.fedasync import Server as AsyncServer
+from flgo.algorithm.asyncbase import AsyncServer
 from flgo.algorithm.fedbase import BasicClient
 import flgo.utils.fmodule as fmodule
 import copy
@@ -25,7 +25,8 @@ class Server(AsyncServer):
             # aggregate and clear updates in buffer
             vt = self.delta / len(self.buffer) + self.ht.to(self.device) if not isinstance(self.ht, torch.Tensor) else self.delta / len(self.buffer)
             self.model = self.model + self.eta * vt
-            self.ht = fmodule._model_sum([h for h in self.hs if not isinstance(h, torch.Tensor)]).to(self.device) / self.num_clients
+            effective_h = [h for h in self.hs if not isinstance(h, torch.Tensor)]
+            self.ht = fmodule._model_sum(effective_h).to(self.device) / len(effective_h)
             self.delta = self.model.zeros_like()
             self.buffer = []
             return True

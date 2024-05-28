@@ -1,5 +1,5 @@
 """This is a non-official implementation of 'Federated Learning with Buffered Asynchronous Aggregation' (http://arxiv.org/abs/2106.06639). """
-from flgo.algorithm.fedasync import AsyncServer
+from flgo.algorithm.asyncbase import AsyncServer
 from flgo.algorithm.fedbase import BasicClient
 import flgo.utils.fmodule as fmodule
 import copy
