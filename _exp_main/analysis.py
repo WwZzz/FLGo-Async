@@ -6,6 +6,7 @@ import argparse
 import importlib
 import algorithm
 import simulator
+import numpy as np
 import model
 import matplotlib.pyplot as plt
 args_parser = argparse.ArgumentParser()
@@ -29,10 +30,11 @@ for ri in records:
     rname = ri.data['option']['algorithm']
     rtest_acc = rdata['test_accuracy']
     rround = list(range(len(rtest_acc)))
-    rtime = rdata['time']
+    rtime = np.array(rdata['time'])/3600.0/24.0
     plt.plot(rtime, rtest_acc, label=rname)
+    print("{}:\t{:.2f}h/round".format(rname, rtime[-1]/len(rtest_acc)*24))
 plt.legend()
-plt.xlabel('time')
+plt.xlabel('time (day)')
 plt.ylabel('test_acc')
 plt.show()
 

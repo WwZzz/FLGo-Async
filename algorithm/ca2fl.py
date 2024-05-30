@@ -7,7 +7,7 @@ import copy
 
 class Server(AsyncServer):
     def initialize(self):
-        self.init_algo_para({'buffer_ratio': 0.1, 'eta': 1.0})
+        self.init_algo_para({'buffer_ratio': 0.4, 'eta': 1.0})
         self.buffer = []
         self.hs = [torch.tensor(0.) for _ in self.clients]
         self.ht = torch.tensor(0.).to(self.device)
@@ -25,8 +25,7 @@ class Server(AsyncServer):
             # aggregate and clear updates in buffer
             vt = self.delta / len(self.buffer) + self.ht.to(self.device) if not isinstance(self.ht, torch.Tensor) else self.delta / len(self.buffer)
             self.model = self.model + self.eta * vt
-            effective_h = [h for h in self.hs if not isinstance(h, torch.Tensor)]
-            self.ht = fmodule._model_sum(effective_h).to(self.device) / len(effective_h)
+            self.ht = fmodule._model_sum([h for h in self.hs if not isinstance(h, torch.Tensor)]).to(self.device) / self.num_clients
             self.delta = self.model.zeros_like()
             self.buffer = []
             return True

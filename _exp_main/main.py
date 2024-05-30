@@ -9,9 +9,9 @@ import simulator
 import model
 
 args_parser = argparse.ArgumentParser()
-args_parser.add_argument('--method', type=str, default='hfl')
+args_parser.add_argument('--method', type=str, default='fedavg')
 args_parser.add_argument('--task', type=str, default='CIFAR100_DIR0.3_N20')
-args_parser.add_argument('--simulator', type=str, default='')
+args_parser.add_argument('--simulator', type=str, default='StaticUniSimulator')
 args_parser.add_argument('--max_time', type=int, default=10801000)
 args_parser.add_argument('--gpu', type=int, default=0)
 args = args_parser.parse_args()

@@ -6,7 +6,7 @@ import copy
 
 class Server(AsyncServer):
     def initialize(self):
-        self.init_algo_para({'buffer_ratio': 0.1, 'eta': 1.0})
+        self.init_algo_para({'buffer_ratio': 0.4, 'eta': 1.0})
         self.buffer = []
 
     def package_handler(self, received_packages:dict):
